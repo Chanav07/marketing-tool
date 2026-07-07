@@ -1,10 +1,14 @@
 import type {
   Brand,
+  BrandContext,
   BrandInput,
+  Competitor,
+  CompetitorScope,
+  CompetitorStatus,
+  ContentGenerateInput,
+  ContentResult,
   Persona,
   PersonaInput,
-  VoiceProfile,
-  VoiceProfileInput,
 } from './types'
 
 const BASE = '/api'
@@ -65,14 +69,65 @@ export const api = {
       if (!res.ok) throw new Error('Failed to delete persona')
     }),
 
-  // Phase 3 — Voice codifier
-  getVoice: (brandId: string) =>
-    fetch(`${BASE}/brands/${brandId}/voice`).then(handle<VoiceProfile>),
+  // Competitors
+  getBrandContext: (brandId: string) =>
+    fetch(`${BASE}/brands/${brandId}/context`).then(handle<BrandContext>),
 
-  putVoice: (brandId: string, data: VoiceProfileInput) =>
-    fetch(`${BASE}/brands/${brandId}/voice`, {
+  getCompetitorScope: (brandId: string) =>
+    fetch(`${BASE}/brands/${brandId}/competitor-scope`).then(handle<CompetitorScope>),
+
+  putCompetitorScope: (brandId: string, regions: string[]) =>
+    fetch(`${BASE}/brands/${brandId}/competitor-scope`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regions }),
+    }).then(handle<CompetitorScope>),
+
+  listCompetitors: (brandId: string) =>
+    fetch(`${BASE}/brands/${brandId}/competitors`).then(handle<Competitor[]>),
+
+  fetchCompetitors: (brandId: string, kind: 'tailored' | 'general' = 'tailored') =>
+    fetch(`${BASE}/brands/${brandId}/competitors/fetch?kind=${kind}`, {
+      method: 'POST',
+    }).then(handle<Competitor[]>),
+
+  addCompetitor: (
+    brandId: string,
+    data: { name: string; website?: string | null; source: 'tailored' | 'general' },
+  ) =>
+    fetch(`${BASE}/brands/${brandId}/competitors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-    }).then(handle<VoiceProfile>),
+    }).then(handle<Competitor>),
+
+  setCompetitorStatus: (id: string, status: CompetitorStatus) =>
+    fetch(`${BASE}/competitors/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).then(handle<Competitor>),
+
+  deleteCompetitor: (id: string) =>
+    fetch(`${BASE}/competitors/${id}`, { method: 'DELETE' }).then((res) => {
+      if (!res.ok) throw new Error('Failed to delete competitor')
+    }),
+
+  pickCompetitor: (id: string) =>
+    fetch(`${BASE}/competitors/${id}/pick`, { method: 'POST' }).then(
+      handle<Competitor[]>,
+    ),
+
+  analyzeCompetitor: (id: string) =>
+    fetch(`${BASE}/competitors/${id}/analyze`, { method: 'POST' }).then(
+      handle<Competitor>,
+    ),
+
+  // Stage 4 — Content creation
+  generateContent: (brandId: string, data: ContentGenerateInput) =>
+    fetch(`${BASE}/brands/${brandId}/content/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(handle<ContentResult>),
 }

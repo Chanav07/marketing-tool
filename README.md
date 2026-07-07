@@ -10,10 +10,10 @@ Built **phase by phase**, mirroring the 6 setup stages from the spec:
 |-------|-------|--------|
 | 1 | Brand inputs (vision, goal, moat) | ✅ Done |
 | 2 | ICP builder (personas + variants) | ✅ Done |
-| 3 | Voice codifier (samples, banned words, rewrite pairs) | ✅ Done |
-| 4 | Competitor agent + Knowledge base | ⏳ |
-| 5 | Pillar synthesis (4–6 approved pillars) | ⏳ |
-| 6 | Brand context store (the brand brain) | ⏳ |
+| 3 | Competitors — context, regions, fetch, analysis | ✅ Done |
+| 4 | Content creation | ⏳ Next |
+
+_(A Voice codifier stage existed but was removed.)_
 
 ## Stack
 
@@ -90,16 +90,42 @@ brand. `user_type` (Accountant/CA/Business owner) and `business_size` (Small/SME
 are dropdowns; the rest free text. Max 5 personas per brand; each holds any number
 of variants. Front-end phases are switched via the top tab strip in `App.tsx`.
 
-## Phase 3 API (Voice codifier)
+## Competitors API
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/brands/{brand_id}/voice` | fetch the profile (auto-creates an empty one on first read) |
-| PUT | `/api/brands/{brand_id}/voice` | replace the whole profile |
+| GET | `/api/brands/{id}/context` | aggregate context from earlier stages: `{ brand, personas }` |
+| GET | `/api/brands/{id}/competitor-scope` | operating regions (auto-creates empty) |
+| PUT | `/api/brands/{id}/competitor-scope` | save regions |
 
-`VoiceProfile` = one row per brand, stored as JSONB documents:
-`samples: string[]`, `banned_terms: string[]` (deduped case-insensitively),
-`rewrite_pairs: [{ dont, do }]`. Edited and saved as a whole (single PUT).
+The Competitors stage starts by selecting a brand, then **pulls that brand's
+context** (vision/goal/moat, personas) into a read-only panel, and asks for
+the operating `regions` (a deduped string list on `CompetitorScope`, one row per
+brand). Regions seed competitor discovery.
+
+**Fetch competitors (LLM):**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/brands/{id}/competitors` | list fetched competitors |
+| POST | `/api/brands/{id}/competitors/fetch` | LLM generates competitors from stage 1–2 context + regions, saved as `pending` |
+| PATCH | `/api/competitors/{id}` | tick/cross → `considered` / `rejected` |
+| DELETE | `/api/competitors/{id}` | remove |
+
+`Competitor` = `{ name, website, description, status: pending/considered/rejected, is_primary }`.
+`POST /competitors/{id}/pick` marks one considered competitor as the primary
+(clears any prior pick for the brand); the UI shows it below the shortlist.
+`POST /competitors/{id}/analyze` runs an LLM analysis (stored in `analysis` JSONB):
+name, revenue, users, top-5 moats, social presence (instagram/blog/facebook/x
+booleans + thirdparty name), and features-marketed each with a sample-marketing
+line. **Revenue and users are looked up via OpenAI web search** (Responses API,
+`web_search` tool) from reputable sources, and each records a `revenue_source` /
+`users_source` citation (shown as a link in the UI). Moats/social/features come
+from model knowledge. "NA" only when a figure genuinely can't be found. Auto-runs
+when a competitor is picked; rendered as tables in the UI.
+The LLM call is isolated in `app/services/llm.py` (OpenAI, model via `OPENAI_MODEL`,
+key via `OPENAI_API_KEY` in `.env`) — swapping providers is a one-file change.
+Structured JSON-schema output guarantees a typed competitor list.
 
 ## Adding a phase
 

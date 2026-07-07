@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://aimark:aimark@localhost:5432/aimark"
     cors_origins: str = "http://localhost:5173"
 
+    # LLM (OpenAI) — used by the "fetch competitors" feature
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

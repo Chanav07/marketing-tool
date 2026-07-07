@@ -74,11 +74,7 @@ export function ICPBuilder() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api.listBrands().then((bs) => {
-      setBrands(bs)
-      if (bs.length && !brandId) setBrandId(bs[0].id)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    api.listBrands().then(setBrands)
   }, [])
 
   useEffect(() => {
@@ -162,7 +158,7 @@ export function ICPBuilder() {
         <label className="brand-select">
           <span>Brand</span>
           <select value={brandId} onChange={(e) => setBrandId(e.target.value)}>
-            {brands.length === 0 && <option value="">No brands yet</option>}
+            <option value="">{brands.length === 0 ? 'No brands yet' : 'Select a brand…'}</option>
             {brands.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -181,7 +177,11 @@ export function ICPBuilder() {
       </div>
 
       {!brandId && (
-        <div className="card muted">Create a brand in <strong>Brand inputs</strong> first, then build its personas here.</div>
+        <div className="card muted">
+          {brands.length === 0
+            ? <>Create a brand in <strong>Brand inputs</strong> first, then build its personas here.</>
+            : <>Select a brand above to build its personas.</>}
+        </div>
       )}
 
       {brandId && (

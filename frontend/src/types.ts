@@ -57,25 +57,64 @@ export interface PersonaInput {
 export const USER_TYPES = ['Accountant', 'CA', 'Business owner'] as const
 export const BUSINESS_SIZES = ['Small', 'SME'] as const
 
-export const MAX_PERSONAS = 5
-
-export interface RewritePair {
-  dont: string
-  do: string
+export interface BrandContext {
+  brand: Brand
+  personas: Persona[]
 }
 
-export interface VoiceProfile {
+export interface CompetitorScope {
   id: string
   brand_id: string
-  samples: string[]
-  banned_terms: string[]
-  rewrite_pairs: RewritePair[]
+  regions: string[]
   created_at: string
   updated_at: string
 }
 
-export interface VoiceProfileInput {
-  samples: string[]
-  banned_terms: string[]
-  rewrite_pairs: RewritePair[]
+export type CompetitorStatus = 'pending' | 'considered' | 'rejected'
+export type CompetitorSource = 'tailored' | 'general'
+
+export interface CompetitorAnalysis {
+  name: string
+  revenue_usd: string
+  revenue_inr: string
+  revenue_source: string
+  users: string
+  users_source: string
+  moats: string[]
+  social: {
+    instagram: boolean
+    blog: boolean
+    facebook: boolean
+    x: boolean
+    thirdparty: string
+  }
+  features: { feature: string; sample_marketing: string; source: string }[]
+}
+
+export interface Competitor {
+  id: string
+  brand_id: string
+  name: string
+  website: string | null
+  description: string | null
+  source: CompetitorSource
+  status: CompetitorStatus
+  is_primary: boolean
+  analysis: CompetitorAnalysis | null
+  position: number
+}
+
+export const MAX_PERSONAS = 5
+
+// Stage 4 — Content creation
+export type ContentForm = 'long' | 'short'
+
+export interface ContentGenerateInput {
+  form: ContentForm
+  content_format: string
+  platform: string
+}
+
+export interface ContentResult {
+  script: string
 }

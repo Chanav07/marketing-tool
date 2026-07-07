@@ -8,15 +8,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.competitor import Competitor, CompetitorScope
     from app.models.persona import Persona
-    from app.models.voice import VoiceProfile
 
 
 class Brand(Base):
     """Top-level brand entity.
 
     Phase 1 (Brand inputs) fields: vision, goal, moat. Later phases attach
-    related tables (personas, voice, competitors, pillars) via this brand id.
+    related tables (personas, competitors, pillars) via this brand id.
     """
 
     __tablename__ = "brands"
@@ -39,10 +39,16 @@ class Brand(Base):
         order_by="Persona.position",
     )
 
-    # Phase 3 — Voice codifier (one-to-one)
-    voice_profile: Mapped["VoiceProfile"] = relationship(
+    # Competitors (one-to-one scope)
+    competitor_scope: Mapped["CompetitorScope"] = relationship(
         back_populates="brand",
         cascade="all, delete-orphan",
         passive_deletes=True,
         uselist=False,
+    )
+    competitors: Mapped[list["Competitor"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Competitor.position",
     )
