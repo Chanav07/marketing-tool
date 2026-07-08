@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import {
-  BUSINESS_SIZES,
   MAX_PERSONAS,
-  USER_TYPES,
   type Brand,
   type Persona,
   type PersonaInput,
@@ -313,18 +311,16 @@ function PersonaEditor(p: EditorProps) {
         <span className="field-label">Define the user</span>
         <span className="field-why">Who they are, at a glance.</span>
         <div className="define-user">
-          <select value={d.user_type} onChange={(e) => p.onField('user_type', e.target.value)}>
-            <option value="">User type…</option>
-            {USER_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-          <select value={d.business_size} onChange={(e) => p.onField('business_size', e.target.value)}>
-            <option value="">Business size…</option>
-            {BUSINESS_SIZES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          <input
+            value={d.user_type}
+            onChange={(e) => p.onField('user_type', e.target.value)}
+            placeholder="User type (e.g. Accountant)"
+          />
+          <input
+            value={d.business_size}
+            onChange={(e) => p.onField('business_size', e.target.value)}
+            placeholder="Business size (e.g. Small)"
+          />
           <input
             value={d.region}
             onChange={(e) => p.onField('region', e.target.value)}
