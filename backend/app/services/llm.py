@@ -1,9 +1,10 @@
-"""LLM-backed competitor discovery.
+"""LLM-backed features: competitor discovery/analysis and content generation.
 
 Provider-isolated: this module is the only place that talks to an LLM, so
-swapping OpenAI for another provider is a one-file change. Feeds the brand's
-stage 1-2 context (vision/goal/moat + personas) and operating regions to the
-model and returns a list of suggested competitors.
+swapping OpenAI for another provider is a one-file change.
+
+Every prompt sent from here is documented in ``backend/PROMPTS.md`` — keep that
+file in sync whenever a system/user prompt below changes.
 """
 import json
 
