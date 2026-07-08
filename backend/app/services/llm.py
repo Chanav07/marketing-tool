@@ -241,6 +241,8 @@ _PLATFORM_GUIDELINES = {
 
 def _platform_guideline(platform: str) -> str:
     key = platform.strip().lower()
+    if key == "google ads":
+        key = "google ad"
     if key in _PLATFORM_GUIDELINES:
         return _PLATFORM_GUIDELINES[key]
     return (
@@ -248,6 +250,124 @@ def _platform_guideline(platform: str) -> str:
         "match the tone, length and structure typical of high-performing content "
         "there, and end with a clear call to action."
     )
+
+
+def _length_rule(form: str) -> str:
+    return (
+        "LONG-FORM: develop the idea fully with a clear structure (headline, "
+        "sections / paragraphs), depth and a strong close."
+        if form == "long"
+        else "SHORT-FORM: tight, punchy and scannable — every line earns its place."
+    )
+
+
+def _persona_block(personas: list) -> str:
+    return "\n".join(f"- {_persona_line(p)}" for p in personas) or "- (none captured)"
+
+
+def _competitor_block(competitors: list[dict]) -> str:
+    lines = []
+    for c in competitors:
+        tag = " (primary)" if c.get("is_primary") else ""
+        moats = ", ".join((c.get("moats") or [])[:3])
+        extra = f" — strengths: {moats}" if moats else ""
+        lines.append(f"- {c['name']}{tag}{extra}")
+    return "\n".join(lines) or "- (none shortlisted)"
+
+
+_THEMES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "themes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "angle": {"type": "string"},
+                },
+                "required": ["title", "angle"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["themes"],
+    "additionalProperties": False,
+}
+
+_THEMES_SYSTEM = (
+    "You are a senior brand marketing strategist. Given a brand's strategy, its "
+    "target personas and how it is differentiated from competitors, propose "
+    "distinct, ready-to-develop content ideas (themes) for a specific format and "
+    "platform. Each theme has a short, specific title and a one-to-two sentence "
+    "angle explaining what it covers and why it resonates with the personas or "
+    "sets the brand apart. Make the themes genuinely different from one another "
+    "and appropriate for the platform's guidelines. Never invent statistics."
+)
+
+
+async def suggest_content_themes(
+    *,
+    brand_name: str,
+    vision: str | None,
+    goal: str | None,
+    moat: str | None,
+    personas: list,
+    competitors: list[dict],
+    form: str,
+    content_format: str,
+    platform: str,
+    count: int = 5,
+) -> list[dict]:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise LLMNotConfigured(
+            "OPENAI_API_KEY is not set. Add it to backend/.env to enable suggestions."
+        )
+
+    user = f"""Propose {count} distinct content themes for a {content_format} to be published on {platform}, for the brand below.
+
+BRAND
+Name: {brand_name}
+Vision: {vision or "—"}
+Goal: {goal or "—"}
+Moat / differentiation: {moat or "—"}
+
+TARGET PERSONAS
+{_persona_block(personas)}
+
+COMPETITIVE CONTEXT (differentiate against these where relevant)
+{_competitor_block(competitors)}
+
+FORMAT: {content_format}
+LENGTH: {_length_rule(form)}
+PLATFORM GUIDELINES ({platform}): {_platform_guideline(platform)}
+
+Return {count} clearly distinct themes, each with a short specific title and a one-to-two sentence angle."""
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    resp = await client.chat.completions.create(
+        model=settings.openai_model,
+        messages=[
+            {"role": "system", "content": _THEMES_SYSTEM},
+            {"role": "user", "content": user},
+        ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "content_themes",
+                "strict": True,
+                "schema": _THEMES_SCHEMA,
+            },
+        },
+    )
+    content = resp.choices[0].message.content or "{}"
+    themes = json.loads(content).get("themes", [])
+    return [
+        {"title": (t.get("title") or "").strip(), "angle": (t.get("angle") or "").strip()}
+        for t in themes
+        if (t.get("title") or "").strip()
+    ]
 
 
 _CONTENT_SYSTEM = (
@@ -272,6 +392,8 @@ async def generate_content(
     form: str,
     content_format: str,
     platform: str,
+    theme_title: str | None = None,
+    theme_angle: str | None = None,
 ) -> str:
     settings = get_settings()
     if not settings.openai_api_key:
@@ -279,22 +401,10 @@ async def generate_content(
             "OPENAI_API_KEY is not set. Add it to backend/.env to enable generation."
         )
 
-    persona_text = "\n".join(f"- {_persona_line(p)}" for p in personas) or "- (none captured)"
-
-    comp_lines = []
-    for c in competitors:
-        tag = " (primary)" if c.get("is_primary") else ""
-        moats = ", ".join((c.get("moats") or [])[:3])
-        extra = f" — strengths: {moats}" if moats else ""
-        comp_lines.append(f"- {c['name']}{tag}{extra}")
-    comp_text = "\n".join(comp_lines) or "- (none shortlisted)"
-
-    length_rule = (
-        "LONG-FORM: develop the idea fully with a clear structure (headline, "
-        "sections / paragraphs), depth and a strong close."
-        if form == "long"
-        else "SHORT-FORM: tight, punchy and scannable — every line earns its place."
-    )
+    theme_line = ""
+    if theme_title:
+        angle = f" — {theme_angle}" if theme_angle else ""
+        theme_line = f"\nCHOSEN THEME: {theme_title}{angle}\nWrite specifically to this theme."
 
     user = f"""Write a {content_format} for the brand below, to be published on {platform}.
 
@@ -305,14 +415,14 @@ Goal: {goal or "—"}
 Moat / differentiation: {moat or "—"}
 
 TARGET PERSONAS
-{persona_text}
+{_persona_block(personas)}
 
 COMPETITIVE CONTEXT (differentiate against these where relevant)
-{comp_text}
+{_competitor_block(competitors)}
 
 FORMAT: {content_format}
-LENGTH: {length_rule}
-PLATFORM GUIDELINES ({platform}): {_platform_guideline(platform)}
+LENGTH: {_length_rule(form)}
+PLATFORM GUIDELINES ({platform}): {_platform_guideline(platform)}{theme_line}
 
 Write the {content_format} now. Return only the content, ready to publish."""
 

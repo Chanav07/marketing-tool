@@ -8,22 +8,23 @@ from app.db.session import get_db
 from app.models.brand import Brand
 from app.models.competitor import Competitor
 from app.models.persona import Persona
-from app.schemas.content import ContentGenerateIn, ContentGenerateOut
-from app.services.llm import LLMNotConfigured, generate_content
+from app.schemas.content import (
+    ContentGenerateIn,
+    ContentGenerateOut,
+    ContentThemesIn,
+    ContentThemesOut,
+)
+from app.services.llm import (
+    LLMNotConfigured,
+    generate_content,
+    suggest_content_themes,
+)
 
 router = APIRouter(tags=["content"])
 
 
-@router.post(
-    "/brands/{brand_id}/content/generate", response_model=ContentGenerateOut
-)
-async def generate_brand_content(
-    brand_id: uuid.UUID,
-    payload: ContentGenerateIn,
-    db: AsyncSession = Depends(get_db),
-):
-    """Generate marketing content grounded in the brand brain (stages 1-3) and the
-    chosen platform's guidelines. Returns a ready-to-edit script."""
+async def _load_brand_brain(brand_id: uuid.UUID, db: AsyncSession):
+    """Load a brand plus its personas and considered competitors (stages 1-3)."""
     brand = await db.get(Brand, brand_id)
     if brand is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Brand not found")
@@ -51,9 +52,20 @@ async def generate_brand_content(
         }
         for c in comps_res.scalars().all()
     ]
+    return brand, personas, competitors
 
+
+@router.post("/brands/{brand_id}/content/themes", response_model=ContentThemesOut)
+async def suggest_brand_content_themes(
+    brand_id: uuid.UUID,
+    payload: ContentThemesIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Suggest 4-5 content themes grounded in the brand brain (stages 1-3) and the
+    chosen platform's guidelines. The user picks one before generating."""
+    brand, personas, competitors = await _load_brand_brain(brand_id, db)
     try:
-        script = await generate_content(
+        themes = await suggest_content_themes(
             brand_name=brand.name,
             vision=brand.vision,
             goal=brand.goal,
@@ -68,7 +80,40 @@ async def generate_brand_content(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:  # noqa: BLE001 — surface provider errors cleanly
         raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Theme suggestion failed: {e}"
+        )
+    return ContentThemesOut(themes=themes)
+
+
+@router.post(
+    "/brands/{brand_id}/content/generate", response_model=ContentGenerateOut
+)
+async def generate_brand_content(
+    brand_id: uuid.UUID,
+    payload: ContentGenerateIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate marketing content grounded in the brand brain (stages 1-3), the
+    chosen platform's guidelines, and (optionally) a chosen theme."""
+    brand, personas, competitors = await _load_brand_brain(brand_id, db)
+    try:
+        script = await generate_content(
+            brand_name=brand.name,
+            vision=brand.vision,
+            goal=brand.goal,
+            moat=brand.moat,
+            personas=personas,
+            competitors=competitors,
+            form=payload.form,
+            content_format=payload.content_format,
+            platform=payload.platform,
+            theme_title=payload.theme_title,
+            theme_angle=payload.theme_angle,
+        )
+    except LLMNotConfigured as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    except Exception as e:  # noqa: BLE001 — surface provider errors cleanly
+        raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, f"Content generation failed: {e}"
         )
-
     return ContentGenerateOut(script=script)

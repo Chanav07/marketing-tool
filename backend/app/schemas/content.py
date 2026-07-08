@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field, field_validator
 
 
-class ContentGenerateIn(BaseModel):
-    """Request to generate a piece of marketing content for a brand."""
+class _ContentReqBase(BaseModel):
+    """Shared inputs for content theme suggestion and generation."""
 
     form: str  # 'long' | 'short'
     content_format: str = Field(min_length=1, max_length=80)
@@ -22,6 +22,26 @@ class ContentGenerateIn(BaseModel):
         if not v:
             raise ValueError("must not be empty")
         return v
+
+
+class ContentThemesIn(_ContentReqBase):
+    pass
+
+
+class ContentTheme(BaseModel):
+    title: str
+    angle: str
+
+
+class ContentThemesOut(BaseModel):
+    themes: list[ContentTheme]
+
+
+class ContentGenerateIn(_ContentReqBase):
+    """Generation request — optionally for a chosen theme."""
+
+    theme_title: str | None = Field(default=None, max_length=200)
+    theme_angle: str | None = Field(default=None, max_length=600)
 
 
 class ContentGenerateOut(BaseModel):

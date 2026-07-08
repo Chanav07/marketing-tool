@@ -91,11 +91,48 @@ analysis. Use "NA" only when a figure genuinely cannot be found.
 
 ---
 
-## 4. Generate content (Stage 4)
+## 4. Suggest content themes (Stage 4)
+
+- **Function:** `suggest_content_themes(...)`
+- **Endpoint:** `POST /api/brands/{id}/content/themes`
+- **API:** `chat.completions` · **Output:** strict JSON schema `themes[] = {title, angle}` (asks for 5)
+
+**System**
+```
+You are a senior brand marketing strategist. Given a brand's strategy, its target personas and how it is differentiated from competitors, propose distinct, ready-to-develop content ideas (themes) for a specific format and platform. Each theme has a short, specific title and a one-to-two sentence angle explaining what it covers and why it resonates with the personas or sets the brand apart. Make the themes genuinely different from one another and appropriate for the platform's guidelines. Never invent statistics.
+```
+
+**User**
+```
+Propose {count} distinct content themes for a {content_format} to be published on {platform}, for the brand below.
+
+BRAND
+Name: {brand_name}
+Vision: {vision or "—"}
+Goal: {goal or "—"}
+Moat / differentiation: {moat or "—"}
+
+TARGET PERSONAS
+{persona_text}
+
+COMPETITIVE CONTEXT (differentiate against these where relevant)
+{comp_text}
+
+FORMAT: {content_format}
+LENGTH: {length_rule}
+PLATFORM GUIDELINES ({platform}): {platform_guideline}
+
+Return {count} clearly distinct themes, each with a short specific title and a one-to-two sentence angle.
+```
+
+---
+
+## 5. Generate content (Stage 4)
 
 - **Function:** `generate_content(...)`
 - **Endpoint:** `POST /api/brands/{id}/content/generate`
 - **API:** `chat.completions` · **Output:** free-form text (the script)
+- Optionally written to a chosen theme (from §4).
 
 **System**
 ```
@@ -121,6 +158,8 @@ COMPETITIVE CONTEXT (differentiate against these where relevant)
 FORMAT: {content_format}
 LENGTH: {length_rule}
 PLATFORM GUIDELINES ({platform}): {platform_guideline}
+CHOSEN THEME: {theme_title} — {theme_angle}       ← only when a theme was picked
+Write specifically to this theme.                  ← only when a theme was picked
 
 Write the {content_format} now. Return only the content, ready to publish.
 ```
@@ -137,5 +176,5 @@ Write the {content_format} now. Return only the content, ready to publish.
 |---|---|
 | `whatsapp` | WhatsApp Business message. Warm, personal, 1:1 conversational tone. Keep it short (ideally under ~700 characters). Open with a hook line, use short line breaks (NO markdown headings or tables), emojis are fine in moderation, and end with ONE clear call to action or link. Avoid ALL-CAPS and spammy phrasing. |
 | `rcs` | RCS Business Message. A short, branded rich message: a bold title line, 1-3 short benefit-led paragraphs, and a suggested action/button label such as 'Get started'. Concise, friendly and mobile-first. |
-| `google ad` | Google Responsive Search Ad. Output EXACTLY as labelled lines: 3-5 'Headline N:' lines (each <= 30 characters) and 2-4 'Description N:' lines (each <= 90 characters). Benefit-led, keyword-relevant, each with a clear CTA. No emojis and no excessive punctuation. |
+| `google ad` (also `google ads`) | Google Responsive Search Ad. Output EXACTLY as labelled lines: 3-5 'Headline N:' lines (each <= 30 characters) and 2-4 'Description N:' lines (each <= 90 characters). Benefit-led, keyword-relevant, each with a clear CTA. No emojis and no excessive punctuation. |
 | *(other / custom)* | Follow the standard best practices and format conventions for {platform}: match the tone, length and structure typical of high-performing content there, and end with a clear call to action. |

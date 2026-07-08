@@ -7,6 +7,8 @@ import type {
   CompetitorStatus,
   ContentGenerateInput,
   ContentResult,
+  ContentThemesInput,
+  ContentThemesResult,
   Persona,
   PersonaInput,
 } from './types'
@@ -124,6 +126,13 @@ export const api = {
     ),
 
   // Stage 4 — Content creation
+  suggestContentThemes: (brandId: string, data: ContentThemesInput) =>
+    fetch(`${BASE}/brands/${brandId}/content/themes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(handle<ContentThemesResult>),
+
   generateContent: (brandId: string, data: ContentGenerateInput) =>
     fetch(`${BASE}/brands/${brandId}/content/generate`, {
       method: 'POST',

@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { Brand, ContentForm } from '../types'
+import type { Brand, ContentForm, ContentTheme } from '../types'
 
-const FORMAT_SUGGESTIONS: Record<ContentForm, string[]> = {
-  long: ['Blog post', 'Article', 'Newsletter', 'Case study', 'Whitepaper', 'Landing page', 'Video script', 'LinkedIn article'],
-  short: ['Instagram caption', 'Instagram script', 'WhatsApp message', 'X / Tweet', 'SMS', 'Ad copy', 'Reel script', 'Push notification'],
+const PLATFORMS_BY_FORM: Record<ContentForm, string[]> = {
+  long: ['Blogs', 'Instagram scripts'],
+  short: ['WhatsApp', 'RCS', 'Google Ads'],
 }
-
-const PLATFORMS = ['WhatsApp', 'RCS', 'Google Ad'] as const
+// The content format the LLM writes, derived from the chosen platform.
+const FORMAT_FOR_PLATFORM: Record<string, string> = {
+  Blogs: 'Blog post',
+  'Instagram scripts': 'Instagram script',
+  WhatsApp: 'WhatsApp message',
+  RCS: 'RCS message',
+  'Google Ads': 'Google ad',
+}
 const OTHER = 'Other'
 
 export function ContentCreator() {
@@ -15,9 +21,12 @@ export function ContentCreator() {
   const [brandId, setBrandId] = useState('')
 
   const [form, setForm] = useState<ContentForm | ''>('')
-  const [format, setFormat] = useState('')
   const [platform, setPlatform] = useState<string>('')
   const [customPlatform, setCustomPlatform] = useState('')
+
+  const [themes, setThemes] = useState<ContentTheme[]>([])
+  const [themesLoading, setThemesLoading] = useState(false)
+  const [selectedTheme, setSelectedTheme] = useState<number | null>(null)
 
   const [script, setScript] = useState('')
   const [generated, setGenerated] = useState(false)
@@ -30,18 +39,52 @@ export function ContentCreator() {
   }, [])
 
   const effectivePlatform = platform === OTHER ? customPlatform.trim() : platform
-  const canGenerate =
-    !!brandId && !!form && !!format.trim() && !!effectivePlatform && !generating
+  const contentFormat =
+    platform === OTHER ? customPlatform.trim() : FORMAT_FOR_PLATFORM[platform] ?? platform
+  const inputsReady = !!brandId && !!form && !!effectivePlatform
+
+  // Any change to the inputs invalidates previously suggested themes + script.
+  function resetDownstream() {
+    setThemes([])
+    setSelectedTheme(null)
+    setScript('')
+    setGenerated(false)
+    setError(null)
+  }
+
+  async function suggestThemes() {
+    if (!inputsReady || themesLoading) return
+    setThemesLoading(true)
+    setSelectedTheme(null)
+    setScript('')
+    setGenerated(false)
+    setError(null)
+    try {
+      const res = await api.suggestContentThemes(brandId, {
+        form: form as ContentForm,
+        content_format: contentFormat,
+        platform: effectivePlatform,
+      })
+      setThemes(res.themes)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setThemesLoading(false)
+    }
+  }
 
   async function generate() {
-    if (!canGenerate) return
+    if (selectedTheme === null || generating) return
+    const theme = themes[selectedTheme]
     setGenerating(true)
     setError(null)
     try {
       const res = await api.generateContent(brandId, {
         form: form as ContentForm,
-        content_format: format.trim(),
+        content_format: contentFormat,
         platform: effectivePlatform,
+        theme_title: theme.title,
+        theme_angle: theme.angle,
       })
       setScript(res.script)
       setGenerated(true)
@@ -62,16 +105,15 @@ export function ContentCreator() {
     }
   }
 
-  const suggestions = form ? FORMAT_SUGGESTIONS[form] : []
-
   return (
     <div className="phase-body">
       <header className="phase-head">
         <span className="phase-tag">Phase 5 · Content creation</span>
         <h1>Content creation</h1>
         <p>
-          Pick a brand, choose the kind of content and where it will run, then generate a script
-          grounded in your brand, personas and competitors — edit it live with a platform preview.
+          Pick a brand, choose the kind of content and where it will run. We suggest themes
+          grounded in your brand, personas, competitors &amp; the platform's guidelines — choose one,
+          then generate an editable script with a live preview.
         </p>
       </header>
 
@@ -106,7 +148,9 @@ export function ContentCreator() {
                 value={form}
                 onChange={(e) => {
                   setForm(e.target.value as ContentForm)
-                  setFormat('')
+                  setPlatform('')
+                  setCustomPlatform('')
+                  resetDownstream()
                 }}
               >
                 <option value="">Select…</option>
@@ -118,54 +162,35 @@ export function ContentCreator() {
 
           {form && (
             <section className="card">
-              <h3>What do you want to create?</h3>
-              <p className="field-why">
-                The specific format — e.g. {form === 'long' ? 'blog, case study' : 'Instagram script, WhatsApp message'}.
-                Pick a suggestion or type your own.
-              </p>
-              <input
-                className="text-input"
-                list="format-suggestions"
-                value={format}
-                onChange={(e) => setFormat(e.target.value)}
-                placeholder={form === 'long' ? 'e.g. Blog post' : 'e.g. Instagram script'}
-              />
-              <datalist id="format-suggestions">
-                {suggestions.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </section>
-          )}
-
-          {form && format.trim() && (
-            <section className="card">
               <h3>Where will it be posted?</h3>
-              <p className="field-why">Choose a platform (its guidelines shape the output), or add your own.</p>
-              <div className="platform-options">
-                {PLATFORMS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`platform-chip ${platform === p ? 'active' : ''}`}
-                    onClick={() => setPlatform(p)}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`platform-chip ${platform === OTHER ? 'active' : ''}`}
-                  onClick={() => setPlatform(OTHER)}
+              <p className="field-why">
+                Options depend on your content type — its guidelines shape the output. Pick
+                <strong> Other…</strong> to enter your own platform.
+              </p>
+              <label className="brand-select">
+                <span>Platform</span>
+                <select
+                  value={platform}
+                  onChange={(e) => {
+                    setPlatform(e.target.value)
+                    resetDownstream()
+                  }}
                 >
-                  Other…
-                </button>
-              </div>
+                  <option value="">Select…</option>
+                  {PLATFORMS_BY_FORM[form].map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                  <option value={OTHER}>Other…</option>
+                </select>
+              </label>
               {platform === OTHER && (
                 <input
                   className="text-input"
                   value={customPlatform}
-                  onChange={(e) => setCustomPlatform(e.target.value)}
+                  onChange={(e) => {
+                    setCustomPlatform(e.target.value)
+                    resetDownstream()
+                  }}
                   placeholder="Enter platform (e.g. LinkedIn, Email, Telegram)"
                   style={{ marginTop: 10 }}
                 />
@@ -175,14 +200,58 @@ export function ContentCreator() {
 
           {error && <div className="alert">{error}</div>}
 
-          <div className="actions">
-            <button onClick={generate} disabled={!canGenerate}>
-              {generating ? 'Generating…' : generated ? 'Regenerate' : 'Generate content'}
-            </button>
-            {generating && (
-              <span className="saved">Analysing brand, personas, competitors &amp; {effectivePlatform} guidelines…</span>
-            )}
-          </div>
+          {inputsReady && (
+            <section className="card">
+              <div className="comp-fetch-head">
+                <div>
+                  <h3>Content themes</h3>
+                  <p className="field-why">
+                    {themes.length
+                      ? 'Pick the direction you like, then generate the script for it.'
+                      : `Theme ideas for your ${contentFormat} on ${effectivePlatform}, drawn from your brand, personas, competitors & the platform's guidelines.`}
+                  </p>
+                </div>
+                <button onClick={suggestThemes} disabled={themesLoading || generating}>
+                  {themesLoading ? 'Analysing…' : themes.length ? 'Re-suggest' : 'Suggest themes'}
+                </button>
+              </div>
+
+              {themesLoading && (
+                <p className="muted">Analysing brand, personas, competitors &amp; {effectivePlatform} guidelines…</p>
+              )}
+              {!themesLoading && themes.length === 0 && (
+                <p className="muted">No themes yet — click “Suggest themes”.</p>
+              )}
+
+              {themes.length > 0 && (
+                <>
+                  <div className="theme-grid">
+                    {themes.map((t, i) => (
+                      <button
+                        type="button"
+                        key={i}
+                        className={`theme-card ${selectedTheme === i ? 'active' : ''}`}
+                        onClick={() => setSelectedTheme(i)}
+                      >
+                        <span className="theme-num">{i + 1}</span>
+                        <h4>{t.title}</h4>
+                        <p>{t.angle}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="actions">
+                    <button onClick={generate} disabled={selectedTheme === null || generating}>
+                      {generating ? 'Generating…' : generated ? 'Regenerate script' : 'Generate script →'}
+                    </button>
+                    {selectedTheme === null && !generating && (
+                      <span className="saved">Select a theme to continue.</span>
+                    )}
+                    {generating && <span className="saved">Writing your {contentFormat}…</span>}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
 
           {generated && (
             <section className="card">
@@ -190,6 +259,9 @@ export function ContentCreator() {
                 <div>
                   <h3>Script &amp; preview</h3>
                   <p className="field-why">
+                    {selectedTheme !== null && themes[selectedTheme] && (
+                      <>Theme: <strong>{themes[selectedTheme].title}</strong>. </>
+                    )}
                     Edit on the left — the {effectivePlatform} preview updates as you type.
                   </p>
                 </div>
@@ -242,7 +314,7 @@ function ContentPreview({ platform, text, brandName }: { platform: string; text:
       </div>
     )
   }
-  if (key === 'google ad') {
+  if (key === 'google ad' || key === 'google ads') {
     return <GoogleAdPreview text={text} brandName={brandName} />
   }
   // Default / custom / long-form: a clean document preview.

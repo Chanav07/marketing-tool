@@ -109,10 +109,27 @@ export const MAX_PERSONAS = 5
 // Stage 4 — Content creation
 export type ContentForm = 'long' | 'short'
 
+export interface ContentThemesInput {
+  form: ContentForm
+  content_format: string
+  platform: string
+}
+
+export interface ContentTheme {
+  title: string
+  angle: string
+}
+
+export interface ContentThemesResult {
+  themes: ContentTheme[]
+}
+
 export interface ContentGenerateInput {
   form: ContentForm
   content_format: string
   platform: string
+  theme_title?: string
+  theme_angle?: string
 }
 
 export interface ContentResult {
